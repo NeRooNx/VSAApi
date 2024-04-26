@@ -1,0 +1,6 @@
+@VSAApi_HostAddress = http://localhost:5267
+
+GET {{VSAApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
