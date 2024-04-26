@@ -5,22 +5,22 @@ using Microsoft.AspNetCore.Mvc;
 using TwitchProject1Model.Models;
 using VSAApi.Shared;
 
-namespace VSAApi.Features.UserFeatures;
+namespace VSAApi.Features.Users.Endpoints;
 
 public class CreateUser
 {
     public class Request : IRequest<Result<Response>>
     {
-        public string? Name { get; set; }
-        public string? LastName1 { get; set; }
-        public string? LastName2 { get; set; }
-        public DateTime? BirthDate { get; set; }
-        public string? Password { get; set; }
+        public string? Name { get; init; }
+        public string? LastName1 { get; init; }
+        public string? LastName2 { get; init; }
+        public DateTime? BirthDate { get; init; }
+        public string? Password { get; init; }
     }
 
     public class Response
     {
-        public Guid Id { get; set; }
+        public Guid Id { get; init; }
     }
 
     public class Validator : AbstractValidator<Request>
@@ -32,20 +32,13 @@ public class CreateUser
         }
     }
 
-    internal sealed class Handler : IRequestHandler<Request, Result<Response>>
+    internal sealed class Handler(VSAApiDBContext dbContext, IValidator<Request> validator)
+        : IRequestHandler<Request, Result<Response>>
     {
-        private readonly VSAApiDBContext _dbContext;
-        private readonly IValidator<Request> _validator;
-
-        public Handler(VSAApiDBContext dbContext, IValidator<Request> validator)
-        {
-            _dbContext = dbContext;
-            _validator = validator;
-        }
-
         public async Task<Result<Response>> Handle(Request request, CancellationToken cancellationToken)
         {
-            FluentValidation.Results.ValidationResult validationResult = _validator.Validate(request);
+            var validationResult = validator.Validate(request);
+
             if (!validationResult.IsValid)
             {
                 return Result.Failure<Response>(new Error(
@@ -63,9 +56,9 @@ public class CreateUser
                 Password = request.Password,
             };
 
-            _dbContext.Add(user);
+            dbContext.Add(user);
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
 
             return new Response()
             {

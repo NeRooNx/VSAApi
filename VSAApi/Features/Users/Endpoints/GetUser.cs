@@ -2,26 +2,26 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using TwitchProject1Model.Model;
+using Microsoft.EntityFrameworkCore;
 using TwitchProject1Model.Models;
 using VSAApi.Shared;
 
-namespace VSAApi.Features.UserFeatures;
+namespace VSAApi.Features.Users.Endpoints;
 
 public class GetUser
 {
     public class Request : IRequest<Result<Response>>
     {
-        public Guid Id;
+        public Guid Id { get; init; }
     }
 
     public class Response
     {
-        public Guid Id;
-        public string? Name { get; set; }
-        public string? LastName1 { get; set; }
-        public string? LastName2 { get; set; }
-        public DateTime? BirthDate { get; set; }
+        public required Guid Id { get; init; }
+        public required string? Name { get; init; }
+        public required string? LastName1 { get; init; }
+        public required string? LastName2 { get; init; }
+        public required DateTime? BirthDate { get; init; }
     }
 
     public class Validator : AbstractValidator<Request>
@@ -31,20 +31,26 @@ public class GetUser
         }
     }
 
-    internal sealed class Handler : IRequestHandler<Request, Result<Response>>
+    internal sealed class Handler(VSAApiDBContext dbContext)
+        : IRequestHandler<Request, Result<Response>>
     {
-        private readonly VSAApiDBContext _dbContext;
-        private readonly IValidator<Request> _validator;
-
-        public Handler(VSAApiDBContext dbContext, IValidator<Request> validator)
+        public async Task<Result<Response>> Handle(
+            Request request,
+            CancellationToken cancellationToken
+        )
         {
-            _dbContext = dbContext;
-            _validator = validator;
-        }
-
-        public async Task<Result<Response>> Handle(Request request, CancellationToken cancellationToken)
-        {
-            User? user = _dbContext.Users.Where(x => x.Id == request.Id).Select(x => x).FirstOrDefault();
+            Response? user = await dbContext
+                .Users
+                .Where(x => x.Id == request.Id)
+                .Select(u => new Response()
+                {
+                    Id = u.Id,
+                    BirthDate = u.BirthDate,
+                    Name = u.Name,
+                    LastName1 = u.LastName1,
+                    LastName2 = u.LastName2,
+                })
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (user is null)
             {
@@ -53,14 +59,7 @@ public class GetUser
                     "User does not exist"));
             }
 
-            return Result.Success(new Response()
-            {
-                Id = user.Id,
-                BirthDate = user.BirthDate,
-                Name = user.Name,
-                LastName1 = user.LastName1,
-                LastName2 = user.LastName2,
-            });
+            return Result.Success(user);
 
         }
     }
