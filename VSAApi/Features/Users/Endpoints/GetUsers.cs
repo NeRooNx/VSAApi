@@ -1,21 +1,25 @@
-﻿using Carter;
-using FluentValidation;
-using MediatR;
+﻿using Immediate.Apis.Shared;
+using Immediate.Handlers.Shared;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using TwitchProject1Model.Models;
 using VSAApi.Shared;
 
 namespace VSAApi.Features.Users.Endpoints;
 
-public class GetUsers
+[Handler]
+[MapGet("api/v1/users")]
+public static partial class GetUsers
 {
-    public class Request : IRequest<Result<Response>>
+    internal static Results<Ok<Response>, BadRequest<Error>> TransformResult(Result<Response> result)
     {
+        return result.IsFailure
+            ? TypedResults.BadRequest(result.Error)
+            : TypedResults.Ok(result.Value);
     }
 
-    //TODO:
-    //My response is a list of users, so i need to declare a sub dto to be able to fill the list with dto objects instead of entities.
-    //Is this ok?
+    public class Request;
+
     public class Response
     {
         public required IReadOnlyList<User> Users { get; init; }
@@ -30,55 +34,28 @@ public class GetUsers
         public required DateTime? BirthDate { get; init; }
     }
 
-    public class Validator : AbstractValidator<Request>
+    private static async ValueTask<Result<Response>> Handle(
+        Request request,
+        VSAApiDBContext dbContext,
+        CancellationToken cancellationToken
+    )
     {
-        public Validator()
-        {
-        }
-    }
-
-    internal sealed class Handler(VSAApiDBContext dbContext)
-        : IRequestHandler<Request, Result<Response>>
-    {
-        public async Task<Result<Response>> Handle(
-            Request request,
-            CancellationToken cancellationToken
-        )
-        {
-            var users = await dbContext.Users
-                .Select(u => new User()
-                {
-                    Id = u.Id,
-                    BirthDate = u.BirthDate,
-                    Name = u.Name,
-                    LastName1 = u.LastName1,
-                    LastName2 = u.LastName2,
-                })
-                .ToListAsync(cancellationToken);
-
-            Response response = new()
+        var users = await dbContext.Users
+            .Select(u => new User()
             {
-                Users = users
-            };
+                Id = u.Id,
+                BirthDate = u.BirthDate,
+                Name = u.Name,
+                LastName1 = u.LastName1,
+                LastName2 = u.LastName2,
+            })
+            .ToListAsync(cancellationToken);
 
-            return Result.Success(response);
-
-        }
-    }
-}
-
-//TODO:
-//GET list: we don't take an input, but we create a new request dto to be able to pass it to sender.
-//Is this ok?
-public class GetUsersEndpoint : ICarterModule
-{
-    public void AddRoutes(IEndpointRouteBuilder app)
-    {
-        app.MapGet("api/v1/users", async (ISender sender) =>
+        Response response = new()
         {
-            Result<GetUsers.Response> result = await sender.Send(new GetUsers.Request());
+            Users = users
+        };
 
-            return result.IsFailure ? Results.BadRequest(result.Error) : Results.Ok(result);
-        });
+        return Result.Success(response);
     }
 }

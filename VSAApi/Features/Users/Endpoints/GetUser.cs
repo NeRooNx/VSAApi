@@ -1,16 +1,25 @@
-﻿using Carter;
-using FluentValidation;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
+﻿using FluentValidation;
+using Immediate.Apis.Shared;
+using Immediate.Handlers.Shared;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using TwitchProject1Model.Models;
 using VSAApi.Shared;
 
 namespace VSAApi.Features.Users.Endpoints;
 
-public class GetUser
+[Handler]
+[MapGet("api/v1/users/{id:guid}")]
+public static partial class GetUser
 {
-    public class Request : IRequest<Result<Response>>
+    internal static Results<Ok<Response>, BadRequest<Error>> TransformResult(Result<Response> result)
+    {
+        return result.IsFailure
+            ? TypedResults.BadRequest(result.Error)
+            : TypedResults.Ok(result.Value);
+    }
+
+    public class Request
     {
         public Guid Id { get; init; }
     }
@@ -24,18 +33,9 @@ public class GetUser
         public required DateTime? BirthDate { get; init; }
     }
 
-    public class Validator : AbstractValidator<Request>
-    {
-        public Validator()
-        {
-        }
-    }
-
-    internal sealed class Handler(VSAApiDBContext dbContext)
-        : IRequestHandler<Request, Result<Response>>
-    {
-        public async Task<Result<Response>> Handle(
+    private static async ValueTask<Result<Response>> Handle(
             Request request,
+            VSAApiDBContext dbContext,
             CancellationToken cancellationToken
         )
         {
@@ -63,25 +63,3 @@ public class GetUser
 
         }
     }
-}
-
-//TODO:
-//GET: we take the id from the url and then make a new dto object and put the id in it. Then pass it to sender.
-//Is this ok?
-public class GetUserEndpoint : ICarterModule
-{
-    public void AddRoutes(IEndpointRouteBuilder app)
-    {
-        app.MapGet("api/v1/users/{id}", async ([FromRoute] Guid id, ISender sender) =>
-        {
-            GetUser.Request request = new()
-            {
-                Id = id,
-            };
-
-            Result<GetUser.Response> result = await sender.Send(request);
-
-            return result.IsFailure ? Results.BadRequest(result.Error) : Results.Ok(result);
-        });
-    }
-}
