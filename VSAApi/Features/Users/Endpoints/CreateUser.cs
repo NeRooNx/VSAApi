@@ -1,15 +1,24 @@
-﻿using Carter;
-using FluentValidation;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
+﻿using FluentValidation;
+using Immediate.Apis.Shared;
+using Immediate.Handlers.Shared;
+using Microsoft.AspNetCore.Http.HttpResults;
 using TwitchProject1Model.Models;
 using VSAApi.Shared;
 
 namespace VSAApi.Features.Users.Endpoints;
 
-public class CreateUser
+[Handler]
+[MapPost("api/v1/users")]
+public static partial class CreateUser
 {
-    public class Request : IRequest<Result<Response>>
+    internal static Results<Ok<Response>, BadRequest<Error>> TransformResult(Result<Response> result)
+    {
+        return result.IsFailure
+            ? TypedResults.BadRequest(result.Error)
+            : TypedResults.Ok(result.Value);
+    }
+
+    public class Request
     {
         public string? Name { get; init; }
         public string? LastName1 { get; init; }
@@ -32,54 +41,38 @@ public class CreateUser
         }
     }
 
-    internal sealed class Handler(VSAApiDBContext dbContext, IValidator<Request> validator)
-        : IRequestHandler<Request, Result<Response>>
+    private static async ValueTask<Result<Response>> Handle(
+        Request request,
+        VSAApiDBContext dbContext,
+        IValidator<Request> validator,
+        CancellationToken cancellationToken)
     {
-        public async Task<Result<Response>> Handle(Request request, CancellationToken cancellationToken)
+        var validationResult = validator.Validate(request);
+
+        if (!validationResult.IsValid)
         {
-            var validationResult = validator.Validate(request);
-
-            if (!validationResult.IsValid)
-            {
-                return Result.Failure<Response>(new Error(
-                    "CreateArticle.Validation",
-                    validationResult.ToString()));
-            }
-
-            TwitchProject1Model.Model.User user = new()
-            {
-                Id = Guid.NewGuid(),
-                BirthDate = request.BirthDate,
-                LastName1 = request.LastName1,
-                LastName2 = request.LastName2,
-                Name = request.Name,
-                Password = request.Password,
-            };
-
-            dbContext.Add(user);
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            return new Response()
-            {
-                Id = user.Id,
-            };
+            return Result.Failure<Response>(new Error(
+                "CreateArticle.Validation",
+                validationResult.ToString()));
         }
-    }
-}
 
-//TODO:
-//POST: we take the request dto directly as body json and pass it to sender.
-//Is this ok?
-public class CreateUserEndpoint : ICarterModule
-{
-    public void AddRoutes(IEndpointRouteBuilder app)
-    {
-        app.MapPost("api/v1/users", async ([FromBody] CreateUser.Request request, ISender sender) =>
+        TwitchProject1Model.Model.User user = new()
         {
-            Result<CreateUser.Response> result = await sender.Send(request);
+            Id = Guid.NewGuid(),
+            BirthDate = request.BirthDate,
+            LastName1 = request.LastName1,
+            LastName2 = request.LastName2,
+            Name = request.Name,
+            Password = request.Password,
+        };
 
-            return result.IsFailure ? Results.BadRequest(result.Error) : Results.Ok(result);
-        });
+        dbContext.Add(user);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new Response()
+        {
+            Id = user.Id,
+        };
     }
 }
